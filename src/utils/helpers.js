@@ -30,7 +30,7 @@ export const VIDEO_BITRATE_OPTIONS = [
 ];
 
 export function formatFileSize(bytes) {
-  if (bytes === 0) return '0 B';
+  if (bytes <= 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -41,7 +41,12 @@ export function getExtension(filename) {
   return filename.split('.').pop().toLowerCase();
 }
 
-export function estimateOutputSize(inputSize, preset) {
-  const ratios = { minimal: 0.3, medium: 0.5, low: 0.7 };
-  return Math.round(inputSize * (ratios[preset] || 0.5));
+export function estimateOutputSize(inputSize, preset, crf) {
+  const crfValue = crf ?? (preset ? COMPRESSION_PRESETS[preset]?.crf : 23) ?? 23;
+
+  if (crfValue <= 0) return inputSize;
+  if (crfValue <= 18) return Math.round(inputSize * (1.0 - (crfValue / 18) * 0.3));
+  if (crfValue <= 23) return Math.round(inputSize * (0.7 - ((crfValue - 18) / 5) * 0.2));
+  if (crfValue <= 28) return Math.round(inputSize * (0.5 - ((crfValue - 23) / 5) * 0.2));
+  return Math.round(inputSize * (0.3 - ((Math.min(crfValue, 51) - 28) / 23) * 0.25));
 }

@@ -1,7 +1,5 @@
 import { VIDEO_FORMATS } from '../utils/helpers';
 
-const VIDEO_EXTS = ['mp4', 'webm', 'avi', 'mov', 'mkv', 'flv', 'wmv', 'gif'];
-
 export default function FormatSelector({ value, onChange }) {
   return (
     <div className="space-y-4">
@@ -12,7 +10,7 @@ export default function FormatSelector({ value, onChange }) {
       <div>
         <p className="text-xs text-gray-500 mb-2">Видео</p>
         <div className="flex flex-wrap gap-2">
-          {VIDEO_EXTS.map((fmt) => (
+          {VIDEO_FORMATS.map((fmt) => (
             <button
               key={fmt}
               onClick={() => onChange(fmt)}

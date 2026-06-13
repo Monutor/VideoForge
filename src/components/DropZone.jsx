@@ -1,9 +1,5 @@
 import { useCallback, useState } from 'react';
 
-const ACCEPTED_TYPES = [
-  'video/mp4', 'video/webm', 'video/x-msvideo', 'video/quicktime',
-  'video/x-matroska', 'video/x-flv', 'video/x-ms-wmv',
-];
 const MAX_SIZE = 500 * 1024 * 1024; // 500MB
 
 export default function DropZone({ onFileSelect, maxSize = MAX_SIZE }) {

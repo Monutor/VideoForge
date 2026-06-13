@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useReducer } from 'react';
 import ModeTabs from './components/ModeTabs';
 import DropZone from './components/DropZone';
 import VideoPreview from './components/VideoPreview';
@@ -9,6 +9,50 @@ import ProgressBar from './components/ProgressBar';
 import { useFFmpeg } from './hooks/useFFmpeg';
 import { formatFileSize, estimateOutputSize, getExtension } from './utils/helpers';
 
+const initialState = {
+  mode: 'convert',
+  file: null,
+  outputBlob: null,
+  outputFormat: 'mp4',
+  outputName: '',
+  videoMetadata: null,
+  qualitySettings: { resolution: -1, fps: 0, videoBitrate: '' },
+  compressionSettings: { crf: 23, resolution: -1, preset: 'medium' },
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case 'SELECT_FILE': {
+      const baseName = action.file.name.replace(/\.[^.]+$/, '');
+      return {
+        ...state,
+        file: action.file,
+        outputBlob: null,
+        videoMetadata: null,
+        outputName: baseName + '_converted',
+      };
+    }
+    case 'CLEAR_FILE':
+      return { ...initialState };
+    case 'SET_MODE':
+      return { ...state, mode: action.mode };
+    case 'SET_FORMAT':
+      return { ...state, outputFormat: action.format };
+    case 'SET_OUTPUT_NAME':
+      return { ...state, outputName: action.name };
+    case 'SET_METADATA':
+      return { ...state, videoMetadata: action.metadata };
+    case 'SET_QUALITY':
+      return { ...state, qualitySettings: { ...state.qualitySettings, ...action.settings } };
+    case 'SET_COMPRESSION':
+      return { ...state, compressionSettings: { ...state.compressionSettings, ...action.settings } };
+    case 'SET_RESULT':
+      return { ...state, outputBlob: action.blob };
+    default:
+      return state;
+  }
+}
+
 function formatDuration(sec) {
   if (!sec || !isFinite(sec)) return '—';
   const m = Math.floor(sec / 60);
@@ -17,22 +61,11 @@ function formatDuration(sec) {
 }
 
 function App() {
-  const [mode, setMode] = useState('convert');
-  const [file, setFile] = useState(null);
-  const [outputBlob, setOutputBlob] = useState(null);
-  const [outputFormat, setOutputFormat] = useState('mp4');
-  const [outputName, setOutputName] = useState('');
-  const [videoMetadata, setVideoMetadata] = useState(null);
-  const [qualitySettings, setQualitySettings] = useState({
-    resolution: -1,
-    fps: 0,
-    videoBitrate: '',
-  });
-  const [compressionSettings, setCompressionSettings] = useState({
-    crf: 23,
-    resolution: -1,
-    preset: 'medium',
-  });
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const {
+    mode, file, outputBlob, outputFormat, outputName,
+    videoMetadata, qualitySettings, compressionSettings,
+  } = state;
 
   const {
     load, loaded, loading, progress, timeRemaining, error, processing,
@@ -40,16 +73,12 @@ function App() {
   } = useFFmpeg();
 
   const handleFileSelect = (selectedFile) => {
-    setFile(selectedFile);
-    setOutputBlob(null);
+    dispatch({ type: 'SELECT_FILE', file: selectedFile });
     setError(null);
-    setVideoMetadata(null);
-    const baseName = selectedFile.name.replace(/\.[^.]+$/, '');
-    setOutputName(baseName + '_converted');
   };
 
   const handleMetadata = (metadata) => {
-    setVideoMetadata(metadata);
+    dispatch({ type: 'SET_METADATA', metadata });
   };
 
   const handleProcess = async () => {
@@ -66,14 +95,14 @@ function App() {
         resolution: qualitySettings.resolution,
         fps: qualitySettings.fps,
       });
-      if (result) setOutputBlob(result);
+      if (result) dispatch({ type: 'SET_RESULT', blob: result });
     } else {
       const result = await compress({
         inputFile: file,
         crf: compressionSettings.crf,
         resolution: compressionSettings.resolution,
       });
-      if (result) setOutputBlob(result);
+      if (result) dispatch({ type: 'SET_RESULT', blob: result });
     }
   };
 
@@ -88,17 +117,16 @@ function App() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const estimatedSize = mode === 'compress'
-    ? estimateOutputSize(file?.size || 0, compressionSettings.preset)
+    ? estimateOutputSize(file?.size || 0, compressionSettings.preset, compressionSettings.crf)
     : null;
 
   return (
     <div className="min-h-screen bg-[#0f0f14]">
       <div className="max-w-4xl mx-auto px-4 py-12">
-        {/* Header */}
         <header className="text-center mb-12">
           <div className="flex items-center justify-center gap-3 mb-4">
             <svg className="w-10 h-10 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -111,19 +139,18 @@ function App() {
           <p className="text-gray-500">Конвертация и сжатие видео прямо в браузере</p>
         </header>
 
-        {/* Mode Tabs */}
         <div className="flex justify-center mb-8">
-          <ModeTabs mode={mode} setMode={setMode} />
+          <ModeTabs
+            mode={mode}
+            setMode={(m) => dispatch({ type: 'SET_MODE', mode: m })}
+          />
         </div>
 
-        {/* Main Content */}
         <div className="space-y-8">
-          {/* Drop Zone */}
           {!file && <DropZone onFileSelect={handleFileSelect} />}
 
           {file && (
             <>
-              {/* File Info + Metadata */}
               <div className="bg-[#1a1a24] rounded-xl px-5 py-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4 min-w-0">
@@ -137,7 +164,7 @@ function App() {
                     </div>
                   </div>
                   <button
-                    onClick={() => { setFile(null); setOutputBlob(null); setError(null); setVideoMetadata(null); }}
+                    onClick={() => { dispatch({ type: 'CLEAR_FILE' }); setError(null); }}
                     className="text-gray-500 hover:text-red-400 transition-colors p-2 shrink-0"
                   >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -155,26 +182,27 @@ function App() {
                 )}
               </div>
 
-              {/* Settings Panel */}
               <div className="grid md:grid-cols-2 gap-6">
                 <div className="bg-[#1a1a24] rounded-2xl p-6 space-y-6">
                   {mode === 'convert' ? (
-                    <FormatSelector value={outputFormat} onChange={setOutputFormat} />
+                    <FormatSelector
+                      value={outputFormat}
+                      onChange={(f) => dispatch({ type: 'SET_FORMAT', format: f })}
+                    />
                   ) : (
                     <CompressionPresets
                       settings={compressionSettings}
-                      onChange={setCompressionSettings}
+                      onChange={(s) => dispatch({ type: 'SET_COMPRESSION', settings: s })}
                     />
                   )}
 
                   {mode === 'convert' && (
                     <QualitySettings
                       settings={qualitySettings}
-                      onChange={setQualitySettings}
+                      onChange={(s) => dispatch({ type: 'SET_QUALITY', settings: s })}
                     />
                   )}
 
-                  {/* Output filename */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-1.5">
                       Имя выходного файла
@@ -182,7 +210,7 @@ function App() {
                     <input
                       type="text"
                       value={outputName}
-                      onChange={(e) => setOutputName(e.target.value)}
+                      onChange={(e) => dispatch({ type: 'SET_OUTPUT_NAME', name: e.target.value })}
                       placeholder="Введите имя файла..."
                       className="w-full bg-[#12121a] border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent"
                     />
@@ -215,19 +243,16 @@ function App() {
                 </div>
               </div>
 
-              {/* Error */}
               {error && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-5 py-4 text-red-400 text-sm">
                   {error}
                 </div>
               )}
 
-              {/* Progress */}
               {processing && (
                 <ProgressBar progress={progress} timeRemaining={timeRemaining} label="Обработка..." />
               )}
 
-              {/* Action Buttons */}
               <div className="flex gap-3">
                 <button
                   onClick={handleProcess}
@@ -256,7 +281,6 @@ function App() {
           )}
         </div>
 
-        {/* Footer */}
         <footer className="mt-20 text-center text-xs text-gray-700">
           <p>Видео обрабатывается локально в вашем браузере. Файлы не загружаются на сервер.</p>
           <p className="mt-1">Рекомендуемый размер файла: до 500 MB</p>

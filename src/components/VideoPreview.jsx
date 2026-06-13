@@ -1,38 +1,29 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { formatFileSize } from '../utils/helpers';
 
 export default function VideoPreview({ file, blob, label, onMetadata }) {
   const videoRef = useRef(null);
-  const fileUrl = useRef(null);
-  const blobUrl = useRef(null);
   const [metadata, setMetadata] = useState(null);
+  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
-    if (file && !fileUrl.current) {
-      fileUrl.current = URL.createObjectURL(file);
-    }
-    return () => {
-      if (fileUrl.current) {
-        URL.revokeObjectURL(fileUrl.current);
-        fileUrl.current = null;
-      }
-    };
-  }, [file]);
+    const video = videoRef.current;
+    const source = blob || file;
+    if (!source || !video) return;
 
-  useEffect(() => {
-    if (blob && !blobUrl.current) {
-      blobUrl.current = URL.createObjectURL(blob);
-    } else if (!blob && blobUrl.current) {
-      URL.revokeObjectURL(blobUrl.current);
-      blobUrl.current = null;
-    }
+    const url = URL.createObjectURL(source);
+    video.src = url;
+
     return () => {
-      if (blobUrl.current) {
-        URL.revokeObjectURL(blobUrl.current);
-        blobUrl.current = null;
-      }
+      URL.revokeObjectURL(url);
+      video.src = '';
     };
-  }, [blob]);
+  }, [file, blob]);
+
+  const handleVideoError = () => {
+    const video = videoRef.current;
+    setLoadError(video?.error?.message || 'Ошибка загрузки видео');
+  };
 
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
@@ -48,7 +39,6 @@ export default function VideoPreview({ file, blob, label, onMetadata }) {
 
   if (!file && !blob) return null;
 
-  const src = blob ? blobUrl.current : fileUrl.current;
   const size = blob ? blob.size : file?.size;
   const name = blob ? 'Результат' : file?.name;
 
@@ -68,11 +58,17 @@ export default function VideoPreview({ file, blob, label, onMetadata }) {
         </div>
       )}
 
+      {loadError && (
+        <div className="px-5 py-8 text-center">
+          <p className="text-red-400 text-sm">{loadError}</p>
+        </div>
+      )}
+
       <video
         ref={videoRef}
-        src={src}
         controls
         onLoadedMetadata={handleLoadedMetadata}
+        onError={handleVideoError}
         className="w-full max-h-80 object-contain bg-black"
       />
 
